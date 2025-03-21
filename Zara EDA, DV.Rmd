@@ -1,0 +1,282 @@
+---
+title: "Zara EDA, DV"
+author: "Andrew Bonici"
+date: "2024-03-23"
+output:
+  word_document: default
+  pdf_document: default
+---
+
+```{R}
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
+library(psych)
+library(forecast)
+```
+
+# 1. Data Import & Structure
+
+1.  Product ID: Unique identifier for each product.
+
+2.  Product Position: The position of the product in the catalog or store layout.
+
+3.  Promotion: Indicator of whether the product is currently on promotion or not.
+
+4.  Product Category: The category of the product, such as clothing, accessories, shoes, etc.
+
+5.  Seasonal: Indicator of whether the product is part of a specific seasonal collection.
+
+6.  Sales Volume: The quantity of products sold.
+
+7.  Brand: Brand of the product.
+
+8.  URL: Product URL (e.g., if the product is sold online).
+
+9.  SKU: Stock Keeping Unit, a unique code used to identify items available for sale.
+
+10. Name: Name of the product.
+
+11. Description: Description of the product.
+
+12. Price: Price of the product.
+
+13. Currency: Currency of the product price.
+
+14. Scraped_at: The time when the data was scraped (e.g., in web scraping process).
+
+15. Terms: Terms or conditions of the product.
+
+16. Section: Section or category where the product is sold in the store (e.g., women's clothing, men's clothing, children's clothing, etc.).
+
+```{R}
+data <- read.csv('C:\\Datasets\\Zara Sales\\zara.csv', sep = ";", quote = "\"" ,stringsAsFactors = FALSE)
+
+head(data)
+```
+
+```{R}
+str(data)
+```
+
+Missing value check
+
+```{R}
+colSums(is.na(data))
+```
+
+```{R}
+dim(data)
+```
+
+```{R}
+describe(data)
+```
+
+Removing unnecessary variables
+
+```{R}
+data <- data[,-c(8:9, 11, 14)]
+data2 <- data
+```
+
+Variable type transformation
+
+```{R}
+data$Product.Position <- as.factor(data$Product.Position)
+data$Product.Category <- as.factor(data$Product.Category)
+data$brand <- as.factor(data$brand)
+data$terms <- as.factor(data$terms)
+data$section <- as.factor(data$section)
+data$name <- as.factor(data$name)
+data$currency <- as.factor(data$currency)
+```
+
+*Data transformation*
+
+```{R}
+# Promotion : No - \> 0 , Yes -\> 1
+data$Promotion <- ifelse(data$Promotion == 'No', 0 ,
+                        ifelse(data$Promotion == 'Yes',1,2))
+
+# Seasonal : No - > 0 , Yes -> 1 
+data$Seasonal <- ifelse(data$Seasonal == 'No',0,
+                       ifelse(data$Seasonal=='Yes',1,2))
+
+# section : MAN - > 0 , WOMEN -> 1 , 
+data$section <- ifelse(data$section == 'MAN',0,
+                       ifelse(data$section=='WOMEN',1,2))
+
+head(data)
+```
+
+```{R}
+str(data)
+```
+
+```{R}
+summary(data)
+```
+
+# 2 Data visualisation
+
+```{R}
+cols = c('Product.Position','Promotion','Seasonal','section')
+
+for (i in cols){
+    print(ggplot(data2, aes(x=data2[,i],fill = data2[,i])) + geom_bar() + ggtitle(paste(i,'count'))+ xlab(i) + theme_bw() + theme(legend.position = 'none'))
+}
+```
+
+```{R}
+for(i in cols){
+    print(ggplot(data2, aes(x=data2[,i], y=price, fill= data2[,i])) + geom_boxplot() + xlab(i) +ggtitle(paste(i,'vs price'))+ theme_bw() + theme(legend.position = 'none') )
+}
+```
+
+```{R}
+for(i in cols){
+    print(ggplot(data2, aes(x=data2[,i], y=Sales.Volume, fill= data2[,i])) + geom_boxplot() + xlab(i) +ggtitle(paste(i,'vs Sales.Volume'))+ theme_bw() + theme(legend.position = 'none') )
+}
+```
+
+```{R}
+ggplot(data2, aes(x=price)) + geom_density() + ggtitle('The density of commodity prices') + xlab('price')
+```
+
+Most items are under \$100.
+
+```{R}
+ggplot(data2, aes(x=price, y= Sales.Volume)) + geom_smooth(se=F)
+```
+
+Relation between price and sales.
+
+*Checking average price by group.*
+
+```{R}
+data2_promotion <- data2 %>% group_by(Promotion) %>% summarize(N = n(), avg_price = round(mean(price,na.rm=T)))
+data2_promotion
+```
+
+```{R}
+ggplot(data2_promotion, aes(x=Promotion, y= avg_price,fill = Promotion)) + geom_col()
+```
+
+Average price of productions on promotion.
+
+```{R}
+data2_Seasonal <- data2 %>% group_by(Seasonal) %>% summarize(N = n(), avg_price = round(mean(price,na.rm=T)))
+data2_Seasonal
+```
+
+```{R}
+ggplot(data2_Seasonal, aes(x=Seasonal,y=avg_price, fill = Seasonal)) + geom_col()
+```
+
+Not much of a difference in average price.
+
+```{R}
+# Average calculation according to the number of people allocated
+data2_section <- data2 %>% group_by(section) %>%  summarize(N = n(), avg_price = round(mean(price,na.rm=T))) 
+data2_section
+
+
+# If pick 30 people and average them
+
+data2_section30 <- data2 %>% group_by(section) %>% sample_n(size = 30)%>% summarize(N = n(), avg_price = round(mean(price,na.rm=T))) 
+data2_section30
+```
+
+```{R}
+ggplot(data2_section30, aes(x=section,y=avg_price, fill = section)) + geom_col()
+```
+
+Average price of male products is considerably higher.
+
+```{R}
+data2_promotion2 <- data2 %>% group_by(Promotion) %>% summarize(N = n(), avg_Sales.Volume = round(mean(Sales.Volume,na.rm=T)))
+data2_promotion2
+```
+
+```{R}
+ggplot(data2_promotion2,aes(x=Promotion, y= avg_Sales.Volume,fill = Promotion)) + geom_col()
+```
+
+Very small difference in average sales volume.
+
+```{R}
+data2_Seasonal2 <- data2 %>% group_by(Seasonal) %>% summarize(N = n(), avg_Sales.Volume = round(mean(Sales.Volume,na.rm=T)))
+data2_Seasonal2
+```
+
+```{R}
+ggplot(data2_Seasonal2, aes(x=Seasonal,y=avg_Sales.Volume, fill = Seasonal)) + geom_col()
+```
+
+Very similar in average sales volume.
+
+*Average calculation according to the number of people allocated*
+
+```{R}
+data2_section2 <- data2 %>% group_by(section) %>%  summarize(N = n(), avg_Sales.Volume = round(mean(Sales.Volume,na.rm=T))) 
+data2_section2
+```
+
+```{R}
+ggplot(data2_section2, aes(x=section,y=avg_Sales.Volume, fill = section)) + geom_col()
+```
+
+The average sales volume for men and women are similar, but shows women buy more because the number of women is smaller.
+
+# 3. Price & sales.volume Prediction
+
+# Modeling
+
+*Linear regression*
+
+```{R}
+md_lr <- lm(price ~Promotion + Seasonal+ section + Sales.Volume ,data=data)
+```
+
+```{R}
+summary(md_lr)
+```
+
+```{R}
+step(md_lr,direction = "backward")
+```
+
+Select variables
+
+```{R}
+md_lr <- lm(price ~ Promotion + section , data = data)
+```
+
+```{R}
+summary(md_lr)
+```
+
+Regression equation: 86.014 + Promotion \* 12.298 + section \* -20.819
+
+```{R}
+plot(md_lr)
+```
+
+```{R}
+pred <- 86.014 + data$Promotion * 12.298 + data$section * -20.819
+```
+
+```{R}
+accuracy(data$price,pred)
+```
+
+```{R}
+md_lr2 <- lm(Sales.Volume ~  price + Promotion + Seasonal+ section  ,data=data)
+```
+
+```{R}
+summary(md_lr2)
+```
+
+The regression model that predicts Sales.Volume is not statistically significant.
